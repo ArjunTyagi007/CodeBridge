@@ -1,4 +1,4 @@
-
+from app.api.translate import router as translate_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,6 +15,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(translate_router, prefix="/api")
 
 @app.get("/")
 def home():
