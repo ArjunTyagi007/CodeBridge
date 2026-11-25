@@ -14,7 +14,22 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Clock,
+  RefreshCw,
+  ArrowLeft,
+  FileCode2,
 } from "lucide-react";
+
+interface HistoryItem {
+  id: number;
+  source_language: string;
+  target_language: string;
+  original_code: string;
+  translated_code: string;
+  created_at: string;
+}
+
+const API_URL = "http://127.0.0.1:8000/api";
 
 function App() {
   const [sourceLanguage, setSourceLanguage] = useState("Python");
@@ -24,11 +39,18 @@ function App() {
     'def greet(name):\n    print("Hello", name)\n\ngreet("World")'
   );
 
-  const [apiMessage, setApiMessage] = useState("");
   const [translatedCode, setTranslatedCode] = useState("");
+  const [apiMessage, setApiMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(false);
 
+  // History states
+  const [activePage, setActivePage] = useState("dashboard");
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  // Translate code
   const handleTranslate = async () => {
     if (!code.trim()) {
       setApiMessage("Please enter some code to translate.");
@@ -50,14 +72,11 @@ function App() {
       setApiMessage("Translating your code...");
       setTranslatedCode("");
 
-      const response = await axios.post(
-        "http://127.0.0.1:8000/api/translate",
-        {
-          source_language: sourceLanguage,
-          target_language: targetLanguage,
-          code: code,
-        }
-      );
+      const response = await axios.post(`${API_URL}/translate`, {
+        source_language: sourceLanguage,
+        target_language: targetLanguage,
+        code: code,
+      });
 
       setTranslatedCode(response.data.translated_code);
       setApiMessage(response.data.message);
@@ -78,6 +97,62 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Fetch translation history
+  const fetchHistory = async () => {
+    try {
+      setHistoryLoading(true);
+      setHistoryError("");
+
+      const response = await axios.get(`${API_URL}/history`);
+
+      setHistory(response.data);
+
+    } catch (error) {
+      console.error(error);
+
+      setHistoryError(
+        axios.isAxiosError(error)
+          ? error.response?.data?.detail ||
+            "Unable to load translation history. Check your backend."
+          : "An unexpected error occurred."
+      );
+
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // Open History page
+  const openHistory = () => {
+    setActivePage("history");
+    fetchHistory();
+  };
+
+  // Load a previous translation into the editors
+  const loadTranslation = (item: HistoryItem) => {
+    setSourceLanguage(
+      item.source_language.charAt(0).toUpperCase() +
+      item.source_language.slice(1)
+    );
+
+    setTargetLanguage(
+      item.target_language.charAt(0).toUpperCase() +
+      item.target_language.slice(1)
+    );
+
+    setCode(item.original_code);
+    setTranslatedCode(item.translated_code);
+
+    setApiMessage("Previous translation loaded successfully.");
+    setErrorMessage(false);
+
+    setActivePage("dashboard");
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleString();
   };
 
   return (
@@ -103,20 +178,37 @@ function App() {
 
         <nav className="space-y-3">
 
-          <div className="flex items-center gap-3 bg-[#5680E9]/20 text-[#84CEEB] border border-[#5680E9]/30 p-3 rounded-xl cursor-pointer">
+          <button
+            onClick={() => setActivePage("dashboard")}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl transition ${
+              activePage === "dashboard"
+                ? "bg-[#5680E9]/20 text-[#84CEEB] border border-[#5680E9]/30"
+                : "text-[#C1C8E4] hover:bg-[#84CEEB]/10 hover:text-white"
+            }`}
+          >
             <LayoutDashboard size={20} />
             <span className="font-medium">Dashboard</span>
-          </div>
+          </button>
 
-          <div className="flex items-center gap-3 text-[#C1C8E4] hover:bg-[#84CEEB]/10 hover:text-white p-3 rounded-xl cursor-pointer transition">
+          <button
+            onClick={openHistory}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl transition ${
+              activePage === "history"
+                ? "bg-[#5680E9]/20 text-[#84CEEB] border border-[#5680E9]/30"
+                : "text-[#C1C8E4] hover:bg-[#84CEEB]/10 hover:text-white"
+            }`}
+          >
             <History size={20} />
-            History
-          </div>
+            <span className="font-medium">History</span>
+          </button>
 
-          <div className="flex items-center gap-3 text-[#C1C8E4] hover:bg-[#84CEEB]/10 hover:text-white p-3 rounded-xl cursor-pointer transition">
+          <button
+            onClick={() => setApiMessage("Settings are coming soon.")}
+            className="w-full flex items-center gap-3 text-[#C1C8E4] hover:bg-[#84CEEB]/10 hover:text-white p-3 rounded-xl transition"
+          >
             <Settings size={20} />
             Settings
-          </div>
+          </button>
 
         </nav>
 
@@ -125,6 +217,7 @@ function App() {
         <div className="mt-auto">
 
           <div className="bg-[#5680E9]/10 border border-[#5680E9]/20 rounded-xl p-4 mb-5">
+
             <div className="flex items-center gap-2 text-[#84CEEB] mb-2">
               <Sparkles size={17} />
               <span className="text-sm font-semibold">
@@ -135,6 +228,7 @@ function App() {
             <p className="text-xs text-[#C1C8E4] leading-relaxed">
               Your intelligent programming language translator.
             </p>
+
           </div>
 
           <p className="text-[#C1C8E4]/60 text-xs">
@@ -145,7 +239,6 @@ function App() {
 
       </aside>
 
-
       {/* MAIN CONTENT */}
 
       <main className="flex-1 min-w-0 p-5 md:p-8 lg:p-10">
@@ -155,257 +248,443 @@ function App() {
         <header className="flex justify-between items-center mb-10">
 
           <div>
+
             <div className="flex items-center gap-2 mb-2">
               <span className="w-2 h-2 rounded-full bg-[#5AB9EA]"></span>
+
               <span className="text-xs text-[#84CEEB] uppercase tracking-widest">
                 CodeBridge Workspace
               </span>
             </div>
 
             <h2 className="text-2xl md:text-3xl font-bold">
-              Code Translator
+              {activePage === "dashboard"
+                ? "Code Translator"
+                : "Translation History"}
             </h2>
 
             <p className="text-[#C1C8E4] mt-2 text-sm md:text-base">
-              Translate code between programming languages.
+              {activePage === "dashboard"
+                ? "Translate code between programming languages."
+                : "View and reuse your previous translations."}
             </p>
+
           </div>
 
-          <button className="bg-[#5680E9]/20 border border-[#5680E9]/30 p-3 rounded-full hover:bg-[#5680E9]/40 transition">
+          <button className="bg-[#5680E9]/20 border border-[#5680E9]/30 p-3 rounded-full">
             <User size={21} className="text-[#84CEEB]" />
           </button>
 
         </header>
 
+        {/* DASHBOARD PAGE */}
 
-        {/* WELCOME SECTION */}
+        {activePage === "dashboard" && (
 
-        <section className="mb-8">
+          <>
 
-          <h3 className="text-xl font-semibold">
-            Welcome to CodeBridge!
-          </h3>
+            <section className="mb-8">
 
-          <p className="text-[#C1C8E4] mt-2 text-sm">
-            Write your code, select your languages, and let CodeBridge do the rest.
-          </p>
+              <h3 className="text-xl font-semibold">
+                Welcome to CodeBridge!
+              </h3>
 
-        </section>
+              <p className="text-[#C1C8E4] mt-2 text-sm">
+                Write your code, select your languages, and let CodeBridge do the rest.
+              </p>
 
+            </section>
 
-        {/* LANGUAGE SELECTION */}
+            {/* LANGUAGE SELECTION */}
 
-        <section className="bg-[#101A31] border border-[#C1C8E4]/20 rounded-2xl p-5 mb-7">
+            <section className="bg-[#101A31] border border-[#C1C8E4]/20 rounded-2xl p-5 mb-7">
 
-          <div className="flex items-center gap-2 mb-4">
-            <ArrowRightLeft size={18} className="text-[#5AB9EA]" />
+              <div className="flex items-center gap-2 mb-4">
+                <ArrowRightLeft size={18} className="text-[#5AB9EA]" />
 
-            <h3 className="font-semibold text-sm">
-              Select Languages
-            </h3>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-
-            {/* Source Language */}
-
-            <div className="w-full flex-1">
-
-              <label className="text-xs text-[#C1C8E4] mb-2 block">
-                SOURCE LANGUAGE
-              </label>
-
-              <select
-                value={sourceLanguage}
-                onChange={(e) => setSourceLanguage(e.target.value)}
-                className="w-full bg-[#172443] border border-[#5680E9]/40 rounded-xl p-3 text-white outline-none focus:border-[#5AB9EA] transition"
-              >
-                <option>Python</option>
-                <option>JavaScript</option>
-                <option>Java</option>
-              </select>
-
-            </div>
-
-            {/* Direction Icon */}
-
-            <div className="bg-[#5680E9]/20 border border-[#5680E9]/30 p-3 rounded-xl mt-5 sm:mt-0">
-              <ArrowRightLeft className="text-[#84CEEB]" size={21} />
-            </div>
-
-            {/* Target Language */}
-
-            <div className="w-full flex-1">
-
-              <label className="text-xs text-[#C1C8E4] mb-2 block">
-                TARGET LANGUAGE
-              </label>
-
-              <select
-                value={targetLanguage}
-                onChange={(e) => setTargetLanguage(e.target.value)}
-                className="w-full bg-[#172443] border border-[#5680E9]/40 rounded-xl p-3 text-white outline-none focus:border-[#5AB9EA] transition"
-              >
-                <option>JavaScript</option>
-                <option>Python</option>
-                <option>Java</option>
-              </select>
-
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* CODE EDITORS */}
-
-        <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-          {/* SOURCE EDITOR */}
-
-          <div className="bg-[#101A31] border border-[#5680E9]/30 rounded-2xl overflow-hidden shadow-lg">
-
-            <div className="p-4 flex justify-between items-center border-b border-[#C1C8E4]/20">
-
-              <div>
-                <h3 className="font-semibold">
-                  Source Code
+                <h3 className="font-semibold text-sm">
+                  Select Languages
                 </h3>
-
-                <p className="text-xs text-[#C1C8E4] mt-1">
-                  Write or paste your code
-                </p>
               </div>
 
-              <span className="bg-[#5680E9]/20 text-[#84CEEB] border border-[#5680E9]/30 text-xs px-3 py-1.5 rounded-lg">
-                {sourceLanguage}
-              </span>
+              <div className="flex flex-col sm:flex-row items-center gap-4">
 
-            </div>
+                <div className="w-full flex-1">
 
-            <Editor
-              height="360px"
-              language={sourceLanguage.toLowerCase()}
-              theme="vs-dark"
-              value={code}
-              onChange={(value) => setCode(value ?? "")}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                automaticLayout: true,
-                scrollBeyondLastLine: false,
-                padding: { top: 18 },
-                roundedSelection: true,
-                cursorSmoothCaretAnimation: "on",
-              }}
-            />
+                  <label className="text-xs text-[#C1C8E4] mb-2 block">
+                    SOURCE LANGUAGE
+                  </label>
 
-            <div className="px-4 py-3 border-t border-[#C1C8E4]/20 flex justify-between text-xs text-[#C1C8E4]">
-              <span>Input Editor</span>
-              <span>{code.length} characters</span>
-            </div>
+                  <select
+                    value={sourceLanguage}
+                    onChange={(e) => setSourceLanguage(e.target.value)}
+                    className="w-full bg-[#172443] border border-[#5680E9]/40 rounded-xl p-3 text-white outline-none focus:border-[#5AB9EA]"
+                  >
+                    <option>Python</option>
+                    <option>JavaScript</option>
+                    <option>Java</option>
+                  </select>
 
-          </div>
+                </div>
 
+                <div className="bg-[#5680E9]/20 border border-[#5680E9]/30 p-3 rounded-xl mt-5 sm:mt-0">
+                  <ArrowRightLeft className="text-[#84CEEB]" size={21} />
+                </div>
 
-          {/* OUTPUT EDITOR */}
+                <div className="w-full flex-1">
 
-          <div className="bg-[#101A31] border border-[#8860D0]/40 rounded-2xl overflow-hidden shadow-lg">
+                  <label className="text-xs text-[#C1C8E4] mb-2 block">
+                    TARGET LANGUAGE
+                  </label>
 
-            <div className="p-4 flex justify-between items-center border-b border-[#C1C8E4]/20">
+                  <select
+                    value={targetLanguage}
+                    onChange={(e) => setTargetLanguage(e.target.value)}
+                    className="w-full bg-[#172443] border border-[#5680E9]/40 rounded-xl p-3 text-white outline-none focus:border-[#5AB9EA]"
+                  >
+                    <option>JavaScript</option>
+                    <option>Python</option>
+                    <option>Java</option>
+                  </select>
 
-              <div>
-                <h3 className="font-semibold">
-                  Translated Code
-                </h3>
+                </div>
 
-                <p className="text-xs text-[#C1C8E4] mt-1">
-                  Your translated result appears here
-                </p>
               </div>
 
-              <span className="bg-[#8860D0]/20 text-[#C1C8E4] border border-[#8860D0]/40 text-xs px-3 py-1.5 rounded-lg">
-                {targetLanguage}
-              </span>
+            </section>
 
-            </div>
+            {/* CODE EDITORS */}
 
-            <Editor
-              height="360px"
-              language={targetLanguage.toLowerCase()}
-              theme="vs-dark"
-              value={translatedCode}
-              options={{
-                readOnly: true,
-                minimap: { enabled: false },
-                fontSize: 14,
-                automaticLayout: true,
-                scrollBeyondLastLine: false,
-                padding: { top: 18 },
-                roundedSelection: true,
-              }}
-            />
+            <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
-            <div className="px-4 py-3 border-t border-[#C1C8E4]/20 flex justify-between text-xs text-[#C1C8E4]">
-              <span>Output Editor</span>
-              <span>{translatedCode.length} characters</span>
-            </div>
+              {/* SOURCE EDITOR */}
 
-          </div>
+              <div className="bg-[#101A31] border border-[#5680E9]/30 rounded-2xl overflow-hidden shadow-lg">
 
-        </section>
+                <div className="p-4 flex justify-between items-center border-b border-[#C1C8E4]/20">
 
+                  <div>
+                    <h3 className="font-semibold">
+                      Source Code
+                    </h3>
 
-        {/* TRANSLATION STATUS */}
+                    <p className="text-xs text-[#C1C8E4] mt-1">
+                      Write or paste your code
+                    </p>
+                  </div>
 
-        {apiMessage && (
+                  <span className="bg-[#5680E9]/20 text-[#84CEEB] border border-[#5680E9]/30 text-xs px-3 py-1.5 rounded-lg">
+                    {sourceLanguage}
+                  </span>
 
-          <div className={`mt-5 flex items-center gap-3 rounded-xl p-4 border ${
-            errorMessage
-              ? "bg-red-500/10 border-red-400/30 text-red-300"
-              : "bg-[#5680E9]/10 border-[#5680E9]/30 text-[#84CEEB]"
-          }`}>
+                </div>
 
-            {loading ? (
-              <Loader2 size={19} className="animate-spin" />
-            ) : errorMessage ? (
-              <AlertCircle size={19} />
-            ) : (
-              <CheckCircle2 size={19} />
+                <Editor
+                  height="360px"
+                  language={sourceLanguage.toLowerCase()}
+                  theme="vs-dark"
+                  value={code}
+                  onChange={(value) => setCode(value ?? "")}
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 14,
+                    automaticLayout: true,
+                    scrollBeyondLastLine: false,
+                    padding: { top: 18 },
+                    roundedSelection: true,
+                    cursorSmoothCaretAnimation: "on",
+                  }}
+                />
+
+                <div className="px-4 py-3 border-t border-[#C1C8E4]/20 flex justify-between text-xs text-[#C1C8E4]">
+                  <span>Input Editor</span>
+                  <span>{code.length} characters</span>
+                </div>
+
+              </div>
+
+              {/* OUTPUT EDITOR */}
+
+              <div className="bg-[#101A31] border border-[#8860D0]/40 rounded-2xl overflow-hidden shadow-lg">
+
+                <div className="p-4 flex justify-between items-center border-b border-[#C1C8E4]/20">
+
+                  <div>
+                    <h3 className="font-semibold">
+                      Translated Code
+                    </h3>
+
+                    <p className="text-xs text-[#C1C8E4] mt-1">
+                      Your translated result appears here
+                    </p>
+                  </div>
+
+                  <span className="bg-[#8860D0]/20 text-[#C1C8E4] border border-[#8860D0]/40 text-xs px-3 py-1.5 rounded-lg">
+                    {targetLanguage}
+                  </span>
+
+                </div>
+
+                <Editor
+                  height="360px"
+                  language={targetLanguage.toLowerCase()}
+                  theme="vs-dark"
+                  value={translatedCode}
+                  options={{
+                    readOnly: true,
+                    minimap: { enabled: false },
+                    fontSize: 14,
+                    automaticLayout: true,
+                    scrollBeyondLastLine: false,
+                    padding: { top: 18 },
+                    roundedSelection: true,
+                  }}
+                />
+
+                <div className="px-4 py-3 border-t border-[#C1C8E4]/20 flex justify-between text-xs text-[#C1C8E4]">
+                  <span>Output Editor</span>
+                  <span>{translatedCode.length} characters</span>
+                </div>
+
+              </div>
+
+            </section>
+
+            {/* TRANSLATION STATUS */}
+
+            {apiMessage && (
+
+              <div className={`mt-5 flex items-center gap-3 rounded-xl p-4 border ${
+                errorMessage
+                  ? "bg-red-500/10 border-red-400/30 text-red-300"
+                  : "bg-[#5680E9]/10 border-[#5680E9]/30 text-[#84CEEB]"
+              }`}>
+
+                {loading ? (
+                  <Loader2 size={19} className="animate-spin" />
+                ) : errorMessage ? (
+                  <AlertCircle size={19} />
+                ) : (
+                  <CheckCircle2 size={19} />
+                )}
+
+                <p className="text-sm">
+                  {apiMessage}
+                </p>
+
+              </div>
+
             )}
 
-            <p className="text-sm">
-              {apiMessage}
-            </p>
+            {/* TRANSLATE BUTTON */}
 
-          </div>
+            <div className="flex justify-end mt-7">
+
+              <button
+                onClick={handleTranslate}
+                disabled={loading}
+                className="flex items-center justify-center gap-3 bg-[#0B1020] hover:bg-[#101A31] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold px-7 py-3.5 rounded-xl shadow-lg transition-all duration-200 hover:-translate-y-0.5"
+              >
+
+                {loading ? (
+                  <Loader2 size={19} className="animate-spin" />
+                ) : (
+                  <Sparkles size={19} />
+                )}
+
+                {loading ? "Translating..." : "Translate Code"}
+
+              </button>
+
+            </div>
+
+          </>
 
         )}
 
+        {/* HISTORY PAGE */}
 
-        {/* TRANSLATE BUTTON */}
+        {activePage === "history" && (
 
-        <div className="flex justify-end mt-7">
+          <section>
 
-          <button
-            onClick={handleTranslate}
-            disabled={loading}
-            className="flex items-center justify-center gap-3 bg-[#0B1020] hover:bg-[#101A31] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold px-7 py-3.5 rounded-xl shadow-lg shadow-black/20 transition-all duration-200 hover:-translate-y-0.5"
-          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
 
-            {loading ? (
-              <Loader2 size={19} className="animate-spin" />
-            ) : (
-              <Sparkles size={19} />
+              <div>
+                <h3 className="text-xl font-semibold">
+                  Previous Translations
+                </h3>
+
+                <p className="text-sm text-[#C1C8E4] mt-1">
+                  Your saved translation records.
+                </p>
+              </div>
+
+              <button
+                onClick={fetchHistory}
+                disabled={historyLoading}
+                className="flex items-center justify-center gap-2 bg-[#101A31] border border-[#5680E9]/40 hover:bg-[#172443] px-4 py-2.5 rounded-xl text-sm transition"
+              >
+                <RefreshCw
+                  size={16}
+                  className={historyLoading ? "animate-spin" : ""}
+                />
+                Refresh History
+              </button>
+
+            </div>
+
+            {/* Loading */}
+
+            {historyLoading && (
+
+              <div className="bg-[#101A31] border border-[#C1C8E4]/20 rounded-2xl p-10 text-center">
+
+                <Loader2 className="animate-spin mx-auto mb-3 text-[#84CEEB]" size={30} />
+
+                <p className="text-[#C1C8E4]">
+                  Loading your translation history...
+                </p>
+
+              </div>
+
             )}
 
-            {loading ? "Translating..." : "Translate Code"}
+            {/* Error */}
 
-          </button>
+            {!historyLoading && historyError && (
 
-        </div>
+              <div className="bg-red-500/10 border border-red-400/30 rounded-xl p-5 text-red-200 flex items-center gap-3">
+                <AlertCircle size={20} />
+                <p>{historyError}</p>
+              </div>
 
+            )}
+
+            {/* Empty history */}
+
+            {!historyLoading && !historyError && history.length === 0 && (
+
+              <div className="bg-[#101A31] border border-[#C1C8E4]/20 rounded-2xl p-10 text-center">
+
+                <History size={40} className="mx-auto mb-4 text-[#84CEEB]" />
+
+                <h3 className="text-lg font-semibold mb-2">
+                  No translations yet
+                </h3>
+
+                <p className="text-sm text-[#C1C8E4] mb-5">
+                  Your completed translations will appear here.
+                </p>
+
+                <button
+                  onClick={() => setActivePage("dashboard")}
+                  className="bg-[#0B1020] hover:bg-[#101A31] px-5 py-2.5 rounded-xl text-sm font-semibold"
+                >
+                  Start Translating
+                </button>
+
+              </div>
+
+            )}
+
+            {/* History records */}
+
+            {!historyLoading && !historyError && history.length > 0 && (
+
+              <div className="space-y-5">
+
+                <p className="text-sm text-[#C1C8E4]">
+                  {history.length} saved translation{history.length !== 1 ? "s" : ""}
+                </p>
+
+                {history.map((item) => (
+
+                  <div
+                    key={item.id}
+                    className="bg-[#101A31] border border-[#C1C8E4]/20 rounded-2xl p-5 shadow-lg"
+                  >
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+
+                      <div className="flex items-center gap-3">
+
+                        <div className="bg-[#5680E9]/20 p-3 rounded-xl">
+                          <FileCode2 size={22} className="text-[#84CEEB]" />
+                        </div>
+
+                        <div>
+                          <h4 className="font-semibold">
+                            Translation #{item.id}
+                          </h4>
+
+                          <p className="text-xs text-[#C1C8E4] mt-1 flex items-center gap-1">
+                            <Clock size={12} />
+                            {formatDate(item.created_at)}
+                          </p>
+                        </div>
+
+                      </div>
+
+                      <button
+                        onClick={() => loadTranslation(item)}
+                        className="flex items-center justify-center gap-2 bg-[#0B1020] hover:bg-[#5680E9] px-4 py-2.5 rounded-xl text-sm font-semibold transition"
+                      >
+                        <ArrowLeft size={16} />
+                        Load Translation
+                      </button>
+
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 mb-4">
+
+                      <span className="bg-[#5680E9]/20 text-[#84CEEB] border border-[#5680E9]/30 px-3 py-1.5 rounded-lg text-xs font-medium">
+                        {item.source_language}
+                      </span>
+
+                      <ArrowRightLeft size={16} className="text-[#C1C8E4]" />
+
+                      <span className="bg-[#8860D0]/20 text-[#C1C8E4] border border-[#8860D0]/40 px-3 py-1.5 rounded-lg text-xs font-medium">
+                        {item.target_language}
+                      </span>
+
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                      <div>
+                        <p className="text-xs text-[#84CEEB] font-semibold mb-2 uppercase tracking-wider">
+                          Original Code
+                        </p>
+
+                        <pre className="bg-[#0B1020] border border-[#5680E9]/20 rounded-xl p-4 text-xs text-[#C1C8E4] overflow-x-auto max-h-48 whitespace-pre-wrap break-words">
+                          {item.original_code}
+                        </pre>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-[#84CEEB] font-semibold mb-2 uppercase tracking-wider">
+                          Translated Code
+                        </p>
+
+                        <pre className="bg-[#0B1020] border border-[#8860D0]/20 rounded-xl p-4 text-xs text-[#C1C8E4] overflow-x-auto max-h-48 whitespace-pre-wrap break-words">
+                          {item.translated_code}
+                        </pre>
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                ))}
+
+              </div>
+
+            )}
+
+          </section>
+
+        )}
 
         {/* FOOTER */}
 
