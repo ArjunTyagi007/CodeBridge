@@ -1,0 +1,4 @@
+esprima==4.0.1
+sqlalchemy
+psycopg[binary]
+python-dotenv
