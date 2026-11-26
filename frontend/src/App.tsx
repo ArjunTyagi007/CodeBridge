@@ -18,6 +18,8 @@ import {
   RefreshCw,
   ArrowLeft,
   FileCode2,
+  Copy,
+  Check,
 } from "lucide-react";
 
 interface CodeExplanation {
@@ -56,6 +58,12 @@ interface HistoryItem {
 
 const API_URL = "http://127.0.0.1:8000/api";
 
+const SUPPORTED_TARGETS: Record<string, string[]> = {
+  Python: ["JavaScript", "Java"],
+  JavaScript: ["Python"],
+  Java: ["Python"],
+};
+
 function App() {
   const [sourceLanguage, setSourceLanguage] = useState("Python");
   const [targetLanguage, setTargetLanguage] = useState("JavaScript");
@@ -67,15 +75,52 @@ function App() {
   const [translatedCode, setTranslatedCode] = useState("");
   const [explanation, setExplanation] =
     useState<CodeExplanation | null>(null);
+
   const [apiMessage, setApiMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(false);
+
+  const [lastHistoryId, setLastHistoryId] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // History states
   const [activePage, setActivePage] = useState("dashboard");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+
+  // Clear previous translation results
+  const clearPreviousResult = () => {
+    setTranslatedCode("");
+    setExplanation(null);
+    setApiMessage("");
+    setErrorMessage(false);
+    setLastHistoryId(null);
+    setCopied(false);
+  };
+
+  // Handle source language changes
+  const handleSourceLanguageChange = (newSource: string) => {
+    setSourceLanguage(newSource);
+
+    const availableTargets = SUPPORTED_TARGETS[newSource];
+
+    setTargetLanguage(availableTargets[0]);
+
+    clearPreviousResult();
+  };
+
+  // Handle target language changes
+  const handleTargetLanguageChange = (newTarget: string) => {
+    setTargetLanguage(newTarget);
+    clearPreviousResult();
+  };
+
+  // Handle source code changes
+  const handleCodeChange = (newCode: string) => {
+    setCode(newCode);
+    clearPreviousResult();
+  };
 
   // Translate code
   const handleTranslate = async () => {
@@ -84,14 +129,13 @@ function App() {
       setErrorMessage(true);
       setTranslatedCode("");
       setExplanation(null);
+      setLastHistoryId(null);
       return;
     }
 
-    if (sourceLanguage === targetLanguage) {
-      setApiMessage("Please select two different languages.");
+    if (!SUPPORTED_TARGETS[sourceLanguage]?.includes(targetLanguage)) {
+      setApiMessage("This language combination is not supported yet.");
       setErrorMessage(true);
-      setTranslatedCode("");
-      setExplanation(null);
       return;
     }
 
@@ -99,8 +143,11 @@ function App() {
       setLoading(true);
       setErrorMessage(false);
       setApiMessage("Translating your code...");
+
       setTranslatedCode("");
       setExplanation(null);
+      setLastHistoryId(null);
+      setCopied(false);
 
       const response = await axios.post(`${API_URL}/translate`, {
         source_language: sourceLanguage,
@@ -111,6 +158,7 @@ function App() {
       setTranslatedCode(response.data.translated_code);
       setExplanation(response.data.explanation ?? null);
       setApiMessage(response.data.message);
+      setLastHistoryId(response.data.history_id ?? null);
       setErrorMessage(false);
     } catch (error) {
       console.error(error);
@@ -123,9 +171,26 @@ function App() {
       setApiMessage(message);
       setTranslatedCode("");
       setExplanation(null);
+      setLastHistoryId(null);
       setErrorMessage(true);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Copy translated code
+  const handleCopyCode = async () => {
+    if (!translatedCode) return;
+
+    try {
+      await navigator.clipboard.writeText(translatedCode);
+      setCopied(true);
+      setApiMessage("Translated code copied successfully!");
+      setErrorMessage(false);
+    } catch (error) {
+      console.error(error);
+      setApiMessage("Unable to copy code. Please copy it manually.");
+      setErrorMessage(true);
     }
   };
 
@@ -160,22 +225,30 @@ function App() {
 
   // Load previous translation
   const loadTranslation = (item: HistoryItem) => {
-    setSourceLanguage(
+    const source =
       item.source_language.charAt(0).toUpperCase() +
-        item.source_language.slice(1)
-    );
+      item.source_language.slice(1).toLowerCase();
 
-    setTargetLanguage(
+    const target =
       item.target_language.charAt(0).toUpperCase() +
-        item.target_language.slice(1)
-    );
+      item.target_language.slice(1).toLowerCase();
+
+    if (!SUPPORTED_TARGETS[source]?.includes(target)) {
+      setHistoryError("This saved translation uses an unsupported language combination.");
+      return;
+    }
+
+    setSourceLanguage(source);
+    setTargetLanguage(target);
 
     setCode(item.original_code);
     setTranslatedCode(item.translated_code);
     setExplanation(null);
 
+    setLastHistoryId(item.id);
     setApiMessage("Previous translation loaded successfully.");
     setErrorMessage(false);
+    setCopied(false);
 
     setActivePage("dashboard");
   };
@@ -338,6 +411,8 @@ function App() {
 
               <div className="flex flex-col sm:flex-row items-center gap-4">
 
+                {/* SOURCE LANGUAGE */}
+
                 <div className="w-full flex-1">
 
                   <label className="text-xs text-[#C1C8E4] mb-2 block">
@@ -346,12 +421,14 @@ function App() {
 
                   <select
                     value={sourceLanguage}
-                    onChange={(e) => setSourceLanguage(e.target.value)}
+                    onChange={(e) =>
+                      handleSourceLanguageChange(e.target.value)
+                    }
                     className="w-full bg-[#172443] border border-[#5680E9]/40 rounded-xl p-3 text-white outline-none focus:border-[#5AB9EA]"
                   >
-                    <option>Python</option>
-                    <option>JavaScript</option>
-                    <option>Java</option>
+                    <option value="Python">Python</option>
+                    <option value="JavaScript">JavaScript</option>
+                    <option value="Java">Java</option>
                   </select>
 
                 </div>
@@ -359,6 +436,8 @@ function App() {
                 <div className="bg-[#5680E9]/20 border border-[#5680E9]/30 p-3 rounded-xl mt-5 sm:mt-0">
                   <ArrowRightLeft className="text-[#84CEEB]" size={21} />
                 </div>
+
+                {/* TARGET LANGUAGE */}
 
                 <div className="w-full flex-1">
 
@@ -368,12 +447,16 @@ function App() {
 
                   <select
                     value={targetLanguage}
-                    onChange={(e) => setTargetLanguage(e.target.value)}
+                    onChange={(e) =>
+                      handleTargetLanguageChange(e.target.value)
+                    }
                     className="w-full bg-[#172443] border border-[#5680E9]/40 rounded-xl p-3 text-white outline-none focus:border-[#5AB9EA]"
                   >
-                    <option>JavaScript</option>
-                    <option>Python</option>
-                    <option>Java</option>
+                    {SUPPORTED_TARGETS[sourceLanguage].map((language) => (
+                      <option key={language} value={language}>
+                        {language}
+                      </option>
+                    ))}
                   </select>
 
                 </div>
@@ -413,7 +496,7 @@ function App() {
                   language={sourceLanguage.toLowerCase()}
                   theme="vs-dark"
                   value={code}
-                  onChange={(value) => setCode(value ?? "")}
+                  onChange={(value) => handleCodeChange(value ?? "")}
                   options={{
                     minimap: { enabled: false },
                     fontSize: 14,
@@ -448,9 +531,28 @@ function App() {
                     </p>
                   </div>
 
-                  <span className="bg-[#8860D0]/20 text-[#C1C8E4] border border-[#8860D0]/40 text-xs px-3 py-1.5 rounded-lg">
-                    {targetLanguage}
-                  </span>
+                  <div className="flex items-center gap-2">
+
+                    <span className="bg-[#8860D0]/20 text-[#C1C8E4] border border-[#8860D0]/40 text-xs px-3 py-1.5 rounded-lg">
+                      {targetLanguage}
+                    </span>
+
+                    <button
+                      onClick={handleCopyCode}
+                      disabled={!translatedCode}
+                      title="Copy translated code"
+                      className="flex items-center gap-2 bg-[#5680E9]/20 hover:bg-[#5680E9]/40 disabled:opacity-40 disabled:cursor-not-allowed border border-[#5680E9]/30 rounded-lg px-3 py-2 text-xs transition"
+                    >
+                      {copied ? (
+                        <Check size={15} />
+                      ) : (
+                        <Copy size={15} />
+                      )}
+
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+
+                  </div>
 
                 </div>
 
@@ -687,9 +789,17 @@ function App() {
                   <CheckCircle2 size={19} />
                 )}
 
-                <p className="text-sm">
-                  {apiMessage}
-                </p>
+                <div>
+                  <p className="text-sm">
+                    {apiMessage}
+                  </p>
+
+                  {lastHistoryId !== null && !errorMessage && (
+                    <p className="text-xs mt-1 opacity-80">
+                      Translation History ID: #{lastHistoryId}
+                    </p>
+                  )}
+                </div>
 
               </div>
             )}

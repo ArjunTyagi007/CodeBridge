@@ -1,14 +1,20 @@
+
 from app.ai.explanation_service import explain_code
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+
 from app.database.connection import get_db
 from app.models.translation import TranslationHistory
+
 from app.translator.python_to_js import translate_python_to_js
 from app.translator.javascript_to_python import (
     translate_javascript_to_python
 )
+from app.translator.python_to_java import translate_python_to_java
+from app.translator.java_to_python import translate_java_to_python
+
 
 router = APIRouter()
 
@@ -24,8 +30,8 @@ def translate_code(
     request: TranslationRequest,
     db: Session = Depends(get_db)
 ):
-    source = request.source_language.lower()
-    target = request.target_language.lower()
+    source = request.source_language.lower().strip()
+    target = request.target_language.lower().strip()
 
     if not request.code.strip():
         raise HTTPException(
@@ -46,12 +52,25 @@ def translate_code(
                 request.code
             )
 
+        # Python to Java
+        elif source == "python" and target == "java":
+            translated_code = translate_python_to_java(
+                request.code
+            )
+
+        # Java to Python
+        elif source == "java" and target == "python":
+            translated_code = translate_java_to_python(
+                request.code
+            )
+
         else:
             raise HTTPException(
                 status_code=400,
                 detail="This language combination is not supported yet."
             )
 
+        # Generate explanation
         explanation = explain_code(
             request.code,
             translated_code,
@@ -59,7 +78,7 @@ def translate_code(
             target
         )
 
-        # Save translation in PostgreSQL
+        # Save translation to database
         history = TranslationHistory(
             source_language=source,
             target_language=target,
