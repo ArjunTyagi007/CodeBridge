@@ -1,12 +1,10 @@
-
+from app.ai.explanation_service import explain_code
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-
 from app.database.connection import get_db
 from app.models.translation import TranslationHistory
-
 from app.translator.python_to_js import translate_python_to_js
 from app.translator.javascript_to_python import (
     translate_javascript_to_python
@@ -26,7 +24,6 @@ def translate_code(
     request: TranslationRequest,
     db: Session = Depends(get_db)
 ):
-
     source = request.source_language.lower()
     target = request.target_language.lower()
 
@@ -37,7 +34,6 @@ def translate_code(
         )
 
     try:
-
         # Python to JavaScript
         if source == "python" and target == "javascript":
             translated_code = translate_python_to_js(
@@ -55,6 +51,13 @@ def translate_code(
                 status_code=400,
                 detail="This language combination is not supported yet."
             )
+
+        explanation = explain_code(
+            request.code,
+            translated_code,
+            source,
+            target
+        )
 
         # Save translation in PostgreSQL
         history = TranslationHistory(
@@ -75,6 +78,7 @@ def translate_code(
             "target_language": target,
             "original_code": request.code,
             "translated_code": translated_code,
+            "explanation": explanation,
             "created_at": history.created_at
         }
 

@@ -20,6 +20,31 @@ import {
   FileCode2,
 } from "lucide-react";
 
+interface CodeExplanation {
+  method: string;
+  language: string;
+  target_language: string;
+  summary: string;
+  variables: {
+    name: string;
+    value: string;
+    data_type: string;
+  }[];
+  functions: {
+    name: string;
+    parameters: string[];
+  }[];
+  explanations: {
+    line: number;
+    code: string;
+    explanation: string;
+  }[];
+  translation_comparison: {
+    source_construct: string;
+    target_construct: string;
+  }[];
+}
+
 interface HistoryItem {
   id: number;
   source_language: string;
@@ -40,6 +65,8 @@ function App() {
   );
 
   const [translatedCode, setTranslatedCode] = useState("");
+  const [explanation, setExplanation] =
+    useState<CodeExplanation | null>(null);
   const [apiMessage, setApiMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(false);
@@ -56,6 +83,7 @@ function App() {
       setApiMessage("Please enter some code to translate.");
       setErrorMessage(true);
       setTranslatedCode("");
+      setExplanation(null);
       return;
     }
 
@@ -63,6 +91,7 @@ function App() {
       setApiMessage("Please select two different languages.");
       setErrorMessage(true);
       setTranslatedCode("");
+      setExplanation(null);
       return;
     }
 
@@ -71,6 +100,7 @@ function App() {
       setErrorMessage(false);
       setApiMessage("Translating your code...");
       setTranslatedCode("");
+      setExplanation(null);
 
       const response = await axios.post(`${API_URL}/translate`, {
         source_language: sourceLanguage,
@@ -79,9 +109,9 @@ function App() {
       });
 
       setTranslatedCode(response.data.translated_code);
+      setExplanation(response.data.explanation ?? null);
       setApiMessage(response.data.message);
       setErrorMessage(false);
-
     } catch (error) {
       console.error(error);
 
@@ -92,8 +122,8 @@ function App() {
 
       setApiMessage(message);
       setTranslatedCode("");
+      setExplanation(null);
       setErrorMessage(true);
-
     } finally {
       setLoading(false);
     }
@@ -108,7 +138,6 @@ function App() {
       const response = await axios.get(`${API_URL}/history`);
 
       setHistory(response.data);
-
     } catch (error) {
       console.error(error);
 
@@ -118,7 +147,6 @@ function App() {
             "Unable to load translation history. Check your backend."
           : "An unexpected error occurred."
       );
-
     } finally {
       setHistoryLoading(false);
     }
@@ -130,20 +158,21 @@ function App() {
     fetchHistory();
   };
 
-  // Load a previous translation into the editors
+  // Load previous translation
   const loadTranslation = (item: HistoryItem) => {
     setSourceLanguage(
       item.source_language.charAt(0).toUpperCase() +
-      item.source_language.slice(1)
+        item.source_language.slice(1)
     );
 
     setTargetLanguage(
       item.target_language.charAt(0).toUpperCase() +
-      item.target_language.slice(1)
+        item.target_language.slice(1)
     );
 
     setCode(item.original_code);
     setTranslatedCode(item.translated_code);
+    setExplanation(null);
 
     setApiMessage("Previous translation loaded successfully.");
     setErrorMessage(false);
@@ -450,15 +479,205 @@ function App() {
 
             </section>
 
+            {/* CODE EXPLANATION */}
+
+            {explanation && (
+              <section className="mt-7 bg-[#101A31] border border-[#5AB9EA]/30 rounded-2xl p-5 md:p-6 shadow-lg">
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+
+                  <div className="flex items-center gap-3">
+                    <div className="bg-[#8860D0]/20 p-3 rounded-xl">
+                      <Sparkles size={22} className="text-[#C1C8E4]" />
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Code Explanation
+                      </h3>
+
+                      <p className="text-xs text-[#C1C8E4] mt-1">
+                        Understand what your code does, step by step.
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="w-fit bg-[#5680E9]/20 text-[#84CEEB] border border-[#5680E9]/30 text-xs px-3 py-1.5 rounded-lg">
+                    Rule-based analysis
+                  </span>
+
+                </div>
+
+                <p className="text-sm text-[#C1C8E4] mb-6">
+                  {explanation.summary}
+                </p>
+
+                {/* Variables */}
+
+                {explanation.variables?.length > 0 && (
+                  <div className="mb-6">
+
+                    <h4 className="font-semibold text-sm mb-3 text-[#84CEEB]">
+                      Variables and Data Types
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+
+                      {explanation.variables.map((variable) => (
+                        <div
+                          key={variable.name}
+                          className="bg-[#172443] border border-[#5680E9]/20 rounded-xl p-4"
+                        >
+                          <p className="font-mono text-sm font-semibold">
+                            {variable.name}
+                          </p>
+
+                          <p className="text-sm text-white mt-1">
+                            Value: {variable.value}
+                          </p>
+
+                          <p className="text-xs text-[#C1C8E4] mt-1">
+                            Type: {variable.data_type}
+                          </p>
+                        </div>
+                      ))}
+
+                    </div>
+                  </div>
+                )}
+
+                {/* Functions */}
+
+                {explanation.functions?.length > 0 && (
+                  <div className="mb-6">
+
+                    <h4 className="font-semibold text-sm mb-3 text-[#84CEEB]">
+                      Functions
+                    </h4>
+
+                    <div className="space-y-3">
+
+                      {explanation.functions.map((fn) => (
+                        <div
+                          key={fn.name}
+                          className="bg-[#172443] border border-[#5680E9]/20 rounded-xl p-4"
+                        >
+                          <p className="font-mono text-sm font-semibold">
+                            {fn.name}()
+                          </p>
+
+                          <p className="text-xs text-[#C1C8E4] mt-1">
+                            Parameters: {fn.parameters.length ? fn.parameters.join(", ") : "None"}
+                          </p>
+                        </div>
+                      ))}
+
+                    </div>
+                  </div>
+                )}
+
+                {/* Line-by-line explanations */}
+
+                {explanation.explanations?.length > 0 && (
+                  <div className="mb-6">
+
+                    <h4 className="font-semibold text-sm mb-3 text-[#84CEEB]">
+                      Step-by-Step Explanation
+                    </h4>
+
+                    <div className="space-y-3">
+
+                      {explanation.explanations.map((item) => (
+                        <div
+                          key={`${item.line}-${item.code}`}
+                          className="bg-[#172443] border border-[#5680E9]/20 rounded-xl p-4"
+                        >
+                          <div className="flex items-start gap-3">
+
+                            <span className="shrink-0 bg-[#5680E9]/20 text-[#84CEEB] rounded-lg px-2 py-1 text-xs">
+                              Line {item.line}
+                            </span>
+
+                            <div className="min-w-0">
+                              <code className="text-sm text-white whitespace-pre-wrap break-words">
+                                {item.code}
+                              </code>
+
+                              <p className="text-sm text-[#C1C8E4] mt-2">
+                                {item.explanation}
+                              </p>
+                            </div>
+
+                          </div>
+                        </div>
+                      ))}
+
+                    </div>
+                  </div>
+                )}
+
+                {/* Translation comparison */}
+
+                {explanation.translation_comparison?.length > 0 && (
+                  <div>
+
+                    <h4 className="font-semibold text-sm mb-3 text-[#84CEEB]">
+                      Language Comparison
+                    </h4>
+
+                    <div className="overflow-x-auto rounded-xl border border-[#5680E9]/20">
+
+                      <table className="w-full text-sm">
+
+                        <thead className="bg-[#172443] text-[#C1C8E4]">
+                          <tr>
+                            <th className="text-left p-3 font-medium">
+                              {sourceLanguage}
+                            </th>
+
+                            <th className="text-left p-3 font-medium">
+                              {targetLanguage}
+                            </th>
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {explanation.translation_comparison.map((item, index) => (
+                            <tr
+                              key={`${item.source_construct}-${index}`}
+                              className="border-t border-[#C1C8E4]/10"
+                            >
+                              <td className="p-3 font-mono text-[#84CEEB]">
+                                {item.source_construct}
+                              </td>
+
+                              <td className="p-3 font-mono text-[#C1C8E4]">
+                                {item.target_construct}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+
+                      </table>
+
+                    </div>
+                  </div>
+                )}
+
+              </section>
+            )}
+
             {/* TRANSLATION STATUS */}
 
             {apiMessage && (
 
-              <div className={`mt-5 flex items-center gap-3 rounded-xl p-4 border ${
-                errorMessage
-                  ? "bg-red-500/10 border-red-400/30 text-red-300"
-                  : "bg-[#5680E9]/10 border-[#5680E9]/30 text-[#84CEEB]"
-              }`}>
+              <div
+                className={`mt-5 flex items-center gap-3 rounded-xl p-4 border ${
+                  errorMessage
+                    ? "bg-red-500/10 border-red-400/30 text-red-300"
+                    : "bg-[#5680E9]/10 border-[#5680E9]/30 text-[#84CEEB]"
+                }`}
+              >
 
                 {loading ? (
                   <Loader2 size={19} className="animate-spin" />
@@ -473,7 +692,6 @@ function App() {
                 </p>
 
               </div>
-
             )}
 
             {/* TRANSLATE BUTTON */}
@@ -499,7 +717,6 @@ function App() {
             </div>
 
           </>
-
         )}
 
         {/* HISTORY PAGE */}
@@ -529,6 +746,7 @@ function App() {
                   size={16}
                   className={historyLoading ? "animate-spin" : ""}
                 />
+
                 Refresh History
               </button>
 
@@ -540,14 +758,16 @@ function App() {
 
               <div className="bg-[#101A31] border border-[#C1C8E4]/20 rounded-2xl p-10 text-center">
 
-                <Loader2 className="animate-spin mx-auto mb-3 text-[#84CEEB]" size={30} />
+                <Loader2
+                  className="animate-spin mx-auto mb-3 text-[#84CEEB]"
+                  size={30}
+                />
 
                 <p className="text-[#C1C8E4]">
                   Loading your translation history...
                 </p>
 
               </div>
-
             )}
 
             {/* Error */}
@@ -555,10 +775,12 @@ function App() {
             {!historyLoading && historyError && (
 
               <div className="bg-red-500/10 border border-red-400/30 rounded-xl p-5 text-red-200 flex items-center gap-3">
-                <AlertCircle size={20} />
-                <p>{historyError}</p>
-              </div>
 
+                <AlertCircle size={20} />
+
+                <p>{historyError}</p>
+
+              </div>
             )}
 
             {/* Empty history */}
@@ -567,7 +789,10 @@ function App() {
 
               <div className="bg-[#101A31] border border-[#C1C8E4]/20 rounded-2xl p-10 text-center">
 
-                <History size={40} className="mx-auto mb-4 text-[#84CEEB]" />
+                <History
+                  size={40}
+                  className="mx-auto mb-4 text-[#84CEEB]"
+                />
 
                 <h3 className="text-lg font-semibold mb-2">
                   No translations yet
@@ -585,7 +810,6 @@ function App() {
                 </button>
 
               </div>
-
             )}
 
             {/* History records */}
@@ -610,7 +834,10 @@ function App() {
                       <div className="flex items-center gap-3">
 
                         <div className="bg-[#5680E9]/20 p-3 rounded-xl">
-                          <FileCode2 size={22} className="text-[#84CEEB]" />
+                          <FileCode2
+                            size={22}
+                            className="text-[#84CEEB]"
+                          />
                         </div>
 
                         <div>
@@ -642,7 +869,10 @@ function App() {
                         {item.source_language}
                       </span>
 
-                      <ArrowRightLeft size={16} className="text-[#C1C8E4]" />
+                      <ArrowRightLeft
+                        size={16}
+                        className="text-[#C1C8E4]"
+                      />
 
                       <span className="bg-[#8860D0]/20 text-[#C1C8E4] border border-[#8860D0]/40 px-3 py-1.5 rounded-lg text-xs font-medium">
                         {item.target_language}
@@ -675,15 +905,12 @@ function App() {
                     </div>
 
                   </div>
-
                 ))}
 
               </div>
-
             )}
 
           </section>
-
         )}
 
         {/* FOOTER */}
